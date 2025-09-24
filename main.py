@@ -225,9 +225,6 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--obj_id', action='store', type=int, required=True)
-    parser.add_argument('--epochs', default=25, type=int)
-    parser.add_argument('--bs', action='store', type=int, required=True)
-    parser.add_argument('--lr', action='store', type=float, required=True)
     parser.add_argument('--gpu_id', action='store', type=int, default=-2, required=False,
                     help='GPU ID (-2: auto-select, -1: CPU)')
     args = parser.parse_args()
