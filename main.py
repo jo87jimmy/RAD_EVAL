@@ -63,7 +63,8 @@ def weights_init(m):
 
 def predict_anomaly(model, image_path, device):
     """
-    對單張圖片進行異常檢測推論
+    對單張圖片進行異常檢測推論。
+    此函數使用固定的、非隨機的預處理流程。
 
     Args:
         model (nn.Module): 訓練好的學生模型
@@ -73,42 +74,54 @@ def predict_anomaly(model, image_path, device):
     Returns:
         tuple: (原始圖像, 重建圖像, 異常遮罩) 均為 numpy array
     """
-    # 定義圖像預處理流程 (應與訓練時的驗證集/測試集流程一致)
+    # --- 1. 定義推論時的圖像預處理流程 ---
+    # 這裡只包含必要的、非隨機的轉換。
+    # 確保 Resize 的尺寸和 Normalize 的 mean/std 與您訓練時使用的完全一致！
+
+    # 假設您的模型輸入尺寸為 224x224
+    TARGET_SIZE = (224, 224)
+
+    # 假設您訓練時使用了 ImageNet 的均值和標準差進行標準化
+    # 如果您使用了不同的值，請務必在此處修改！
+    NORMALIZE_MEAN = [0.485, 0.456, 0.406]
+    NORMALIZE_STD = [0.229, 0.224, 0.225]
+
     preprocess = transforms.Compose([
-        transforms.Resize((224, 224)), # 假設模型輸入尺寸為 224x224
+        transforms.Resize(TARGET_SIZE),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        transforms.Normalize(mean=NORMALIZE_MEAN, std=NORMALIZE_STD),
     ])
 
-    # 載入並預處理圖像
+    # --- 2. 載入並預處理圖像 ---
+    # 確保以 RGB 模式打開，與訓練時保持一致
     image = Image.open(image_path).convert("RGB")
-    image_tensor = preprocess(image).unsqueeze(0).to(device) # 增加 batch 維度 [C, H, W] -> [1, C, H, W]
+    # unsqueeze(0) 是為了增加一個批次維度，從 [C, H, W] 變為 [1, C, H, W]
+    image_tensor = preprocess(image).unsqueeze(0).to(device)
 
-    # --- 4. 執行前向傳播 (在 no_grad 上下文中以節省資源) ---
+    # --- 3. 執行前向傳播 ---
     with torch.no_grad():
-        # 推論時，我們只需要分割圖，但模型會同時返回重建圖
-        # 我們不需要特徵圖，所以 return_feats=False
         recon_image_tensor, seg_map_logits = model(image_tensor, return_feats=False)
 
-    # --- 5. 後處理輸出 ---
+    # --- 4. 後處理輸出 ---
 
-    # a. 處理分割圖
-    # seg_map_logits 的形狀是 [1, 2, H, W]，其中 2 是類別數 (0:正常, 1:異常)
-    # 使用 softmax 將 logits 轉換為機率
+    # a. 處理分割圖 (Anomaly Mask)
     seg_map_probs = torch.softmax(seg_map_logits, dim=1)
-    # 使用 argmax 找出每個像素點機率最高的類別，得到 [1, H, W] 的預測遮罩
+    # 沿著通道維度 (dim=1) 找到最大機率的索引 (0=正常, 1=異常)
     anomaly_mask_tensor = torch.argmax(seg_map_probs, dim=1)
 
     # b. 將 Tensor 轉換為可用於顯示的 NumPy Array
-    original_image_np = np.array(image.resize((224, 224)))
 
-    # 反正規化重建圖像以便顯示
+    # 原始圖像，調整到與模型輸入相同的尺寸以便比較
+    original_image_np = np.array(image.resize(TARGET_SIZE))
+
+    # 反標準化 (De-normalize) 重建圖像，以便能正確顯示
     recon_image_np = recon_image_tensor.squeeze().cpu().numpy().transpose(1, 2, 0)
-    mean = np.array([0.485, 0.456, 0.406])
-    std = np.array([0.229, 0.224, 0.225])
+    mean = np.array(NORMALIZE_MEAN)
+    std = np.array(NORMALIZE_STD)
     recon_image_np = std * recon_image_np + mean
-    recon_image_np = np.clip(recon_image_np, 0, 1)
+    recon_image_np = np.clip(recon_image_np, 0, 1) # 將數值限制在 [0, 1] 範圍內
 
+    # 將預測的遮罩轉換為 numpy 格式
     anomaly_mask_np = anomaly_mask_tensor.squeeze().cpu().numpy().astype(np.uint8)
 
     return original_image_np, recon_image_np, anomaly_mask_np
