@@ -15,10 +15,9 @@ import torch.nn.functional as F
 from sklearn.metrics import roc_auc_score
 from loss import FocalLoss, SSIM
 from model_unet import AnomalyDetectionModel
-from data_loader import MVTecDRAEMTrainDataset
+from data_loader import MVTecDRAEM_Test_Visual_Dataset
 import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
-from data_loader_val import MVTecDRAEM_Test_Visual_Dataset
 
 def setup_seed(seed):
     # 設定隨機種子，確保實驗可重現
