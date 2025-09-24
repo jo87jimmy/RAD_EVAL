@@ -147,71 +147,91 @@ def main(obj_names, args):
 
         # --- 2. 設定為評估模式 ---
         student_model.eval()
-        path = f'./mvtec'  # 測試資料路徑
 
-        # 建立 dataset / dataloader
-        data_dir = os.path.join(path, obj_name, "test")
-        print(f"  📂 建立 dataset: {data_dir}")
-        dataset = MVTecDRAEM_Test_Visual_Dataset(
-            data_dir, resize_shape=[256,256])
-        dataloader = DataLoader(dataset,
-                                batch_size=1,
-                                shuffle=False,
-                                num_workers=0)
-        print("  ✅ Dataset size:", len(dataset))
+        test_path = './mvtec/' + obj_name + '/test'  # 測試資料路徑
+        items = ['good', 'broken_large', 'broken_small', 'contamination']  # 測試資料標籤
+        print(f"🔍 測試資料夾：{test_path}，共 {len(items)} 類別")
 
-        print("  🚀 開始遍歷 dataloader...")
-        for i_batch, sample_batched in enumerate(dataloader):
-            # sample = {'image': image, 'has_anomaly': has_anomaly,'mask': mask, 'idx': idx}
-            print(f"    處理 batch {i_batch+1}/{len(dataloader)} (idx={sample_batched['idx'].item()})")
-            # --- 3. 前處理 ---
-            gray_batch = sample_batched["image"].cuda()
+        # 依類別逐張讀取影像並執行推論
+        for item in items:
+            item_path = os.path.join(test_path, item)
+            img_files = [
+                f for f in os.listdir(item_path)
+                if f.endswith('.png') or f.endswith('.jpg')
+            ]
 
-            # --- 4. 預測 ---
-            original, reconstruction, anomaly_mask = predict_anomaly(student_model, gray_batch, device)
+            print(f"\n📂 類別：{item}，共 {len(img_files)} 張影像")
 
-            # --- 可視化結果 ---
-            fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-            axes[0].imshow(original)
-            axes[0].set_title('Original Image')
-            axes[0].axis('off')
+            for img_name in img_files:
+                img_path = os.path.join(item_path, img_name)
+                print(f"\n🖼️ 處理影像：{img_path}")
+                original, reconstruction, anomaly_mask = predict_anomaly(student_model, img_path, device)
 
-            axes[1].imshow(reconstruction)
-            axes[1].set_title('Reconstructed Image')
-            axes[1].axis('off')
+                # --- 可視化結果 ---
+                fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+                axes[0].imshow(original)
+                axes[0].set_title('Original Image')
+                axes[0].axis('off')
 
-            # 將異常遮罩（0和1）與原始圖像疊加顯示
-            axes[2].imshow(original)
-            axes[2].imshow(anomaly_mask, cmap='jet', alpha=0.4) # 使用半透明疊加
-            axes[2].set_title('Anomaly Mask')
-            axes[2].axis('off')
+                axes[1].imshow(reconstruction)
+                axes[1].set_title('Reconstructed Image')
+                axes[1].axis('off')
 
-            # 儲存整張圖
-            plt.tight_layout()
-            plt.savefig(f"{save_root}/comparison_{obj_name}_{i_batch}.png")
-            plt.close()
-        # --- 使用範例 ---
-        # image_path_to_test = 'path/to/your/test_image.png' # ⬅️ 修改為您要測試的圖片路徑
-        # original, reconstruction, anomaly_mask = predict_anomaly(student_model, image_path_to_test, device)
+                # 將異常遮罩（0和1）與原始圖像疊加顯示
+                axes[2].imshow(original)
+                axes[2].imshow(anomaly_mask, cmap='jet', alpha=0.4) # 使用半透明疊加
+                axes[2].set_title('Anomaly Mask')
+                axes[2].axis('off')
 
-        # # --- 可視化結果 ---
-        # fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-        # axes[0].imshow(original)
-        # axes[0].set_title('Original Image')
-        # axes[0].axis('off')
+                # 儲存整張圖
+                plt.tight_layout()
+                plt.savefig(f"{save_root}/comparison_{obj_name}_{img_name}.png")
+                plt.close()
 
-        # axes[1].imshow(reconstruction)
-        # axes[1].set_title('Reconstructed Image')
-        # axes[1].axis('off')
 
-        # # 將異常遮罩（0和1）與原始圖像疊加顯示
-        # axes[2].imshow(original)
-        # axes[2].imshow(anomaly_mask, cmap='jet', alpha=0.4) # 使用半透明疊加
-        # axes[2].set_title('Anomaly Mask')
-        # axes[2].axis('off')
+        # # 建立 dataset / dataloader
+        # path = f'./mvtec'  # 測試資料路徑
+        # data_dir = os.path.join(path, obj_name, "test")
+        # print(f"  📂 建立 dataset: {data_dir}")
+        # dataset = MVTecDRAEM_Test_Visual_Dataset(
+        #     data_dir, resize_shape=[256,256])
+        # dataloader = DataLoader(dataset,
+        #                         batch_size=1,
+        #                         shuffle=False,
+        #                         num_workers=0)
+        # print("  ✅ Dataset size:", len(dataset))
 
-        # plt.show()
-        # torch.cuda.empty_cache()
+        # print("  🚀 開始遍歷 dataloader...")
+        # for i_batch, sample_batched in enumerate(dataloader):
+        #     # sample = {'image': image, 'has_anomaly': has_anomaly,'mask': mask, 'idx': idx}
+        #     print(f"    處理 batch {i_batch+1}/{len(dataloader)} (idx={sample_batched['idx'].item()})")
+        #     # --- 3. 前處理 ---
+        #     gray_batch = sample_batched["image"]
+
+        #     # --- 4. 預測 ---
+        #     original, reconstruction, anomaly_mask = predict_anomaly(student_model, gray_batch, device)
+
+        #     # --- 可視化結果 ---
+        #     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+        #     axes[0].imshow(original)
+        #     axes[0].set_title('Original Image')
+        #     axes[0].axis('off')
+
+        #     axes[1].imshow(reconstruction)
+        #     axes[1].set_title('Reconstructed Image')
+        #     axes[1].axis('off')
+
+        #     # 將異常遮罩（0和1）與原始圖像疊加顯示
+        #     axes[2].imshow(original)
+        #     axes[2].imshow(anomaly_mask, cmap='jet', alpha=0.4) # 使用半透明疊加
+        #     axes[2].set_title('Anomaly Mask')
+        #     axes[2].axis('off')
+
+        #     # 儲存整張圖
+        #     plt.tight_layout()
+        #     plt.savefig(f"{save_root}/comparison_{obj_name}_{i_batch}.png")
+        #     plt.close()
+
 
 # =======================
 # Run pipeline
