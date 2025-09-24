@@ -143,7 +143,7 @@ def main(obj_names, args):
         ).to(device)
 
         # 載入訓練好的學生模型權重
-        model_weights_path = './student_model_checkpoints/student_model.pckl' # ⬅️ 修改為您的權重路徑
+        model_weights_path = './student_model_checkpoints/bottle.pckl' # ⬅️ 我的的權重路徑
         student_model.load_state_dict(torch.load(model_weights_path, map_location=device))
 
         # --- 2. 設定為評估模式 ---
