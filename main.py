@@ -162,12 +162,13 @@ def main(obj_names, args):
 
         print("  🚀 開始遍歷 dataloader...")
         for i_batch, sample_batched in enumerate(dataloader):
+            # sample = {'image': image, 'has_anomaly': has_anomaly,'mask': mask, 'idx': idx}
             print(f"    處理 batch {i_batch+1}/{len(dataloader)} (idx={sample_batched['idx'].item()})")
             # --- 3. 前處理 ---
-            image = sample_batched['image'].to(device)
+            gray_batch = sample_batched["image"].cuda()
 
             # --- 4. 預測 ---
-            original, reconstruction, anomaly_mask = predict_anomaly(student_model, image, device)
+            original, reconstruction, anomaly_mask = predict_anomaly(student_model, gray_batch, device)
 
             # --- 可視化結果 ---
             fig, axes = plt.subplots(1, 3, figsize=(15, 5))
