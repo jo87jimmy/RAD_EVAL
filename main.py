@@ -161,9 +161,9 @@ def run_inference(image_path, model, device, save_path):
         # 學生模型會同時輸出重建圖和分割圖
         recon_image, seg_map = model(input_tensor, return_feats=False)
 
-    recon_image = recon_image.squeeze().cpu().numpy().transpose(1, 2, 0)
-    recon_image = (recon_image * 255).astype(np.uint8)
-    Image.fromarray(recon_image).save(f"{save_path}_recon.png")
+    # recon_image = recon_image.squeeze().cpu().numpy().transpose(1, 2, 0)
+    # recon_image = (recon_image * 255).astype(np.uint8)
+    # Image.fromarray(recon_image).save(f"{save_path}_recon.png")
     # ==================================================================
     # 6. 後處理輸出結果
     # ==================================================================
@@ -182,7 +182,7 @@ def run_inference(image_path, model, device, save_path):
     print(f"Image-level anomaly score: {image_anomaly_score:.4f}")
 
     # 可以設定一個閾值來得到二值化的異常遮罩
-    threshold = 0.1
+    threshold = 0.5
     binary_mask = (anomaly_map
                    > threshold).squeeze().cpu().numpy().astype(np.uint8)
 
