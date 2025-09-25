@@ -19,6 +19,7 @@ from data_loader import MVTecDRAEM_Test_Visual_Dataset
 import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 
+
 def setup_seed(seed):
     # 設定隨機種子，確保實驗可重現
     torch.manual_seed(seed)
@@ -27,6 +28,7 @@ def setup_seed(seed):
     random.seed(seed)
     torch.backends.cudnn.deterministic = True  # 保證結果可重現
     torch.backends.cudnn.benchmark = False  # 關閉自動最佳化搜尋
+
 
 # =======================
 # Utilities
@@ -51,6 +53,7 @@ def get_available_gpu():
     # 選擇記憶體使用最少的GPU
     available_gpu = min(gpu_memory, key=lambda x: x[1])[0]
     return available_gpu
+
 
 def weights_init(m):
     classname = m.__class__.__name__
@@ -100,7 +103,8 @@ def predict_anomaly(model, image_path, device):
 
     # --- 3. 執行前向傳播 ---
     with torch.no_grad():
-        recon_image_tensor, seg_map_logits = model(image_tensor, return_feats=False)
+        recon_image_tensor, seg_map_logits = model(image_tensor,
+                                                   return_feats=False)
 
     # --- 4. 後處理輸出 ---
 
@@ -115,16 +119,19 @@ def predict_anomaly(model, image_path, device):
     original_image_np = np.array(image.resize(TARGET_SIZE))
 
     # 反標準化 (De-normalize) 重建圖像，以便能正確顯示
-    recon_image_np = recon_image_tensor.squeeze().cpu().numpy().transpose(1, 2, 0)
+    recon_image_np = recon_image_tensor.squeeze().cpu().numpy().transpose(
+        1, 2, 0)
     mean = np.array(NORMALIZE_MEAN)
     std = np.array(NORMALIZE_STD)
     recon_image_np = std * recon_image_np + mean
-    recon_image_np = np.clip(recon_image_np, 0, 1) # 將數值限制在 [0, 1] 範圍內
+    recon_image_np = np.clip(recon_image_np, 0, 1)  # 將數值限制在 [0, 1] 範圍內
 
     # 將預測的遮罩轉換為 numpy 格式
-    anomaly_mask_np = anomaly_mask_tensor.squeeze().cpu().numpy().astype(np.uint8)
+    anomaly_mask_np = anomaly_mask_tensor.squeeze().cpu().numpy().astype(
+        np.uint8)
 
     return original_image_np, recon_image_np, anomaly_mask_np
+
 
 # =======================
 # Main Pipeline
@@ -142,27 +149,27 @@ def main(obj_names, args):
         # Load
         IMG_CHANNELS = 3
         SEG_CLASSES = 2
-        STUDENT_RECON_BASE = 64
-        STUDENT_DISC_BASE = 64
         # 實例化學生模型架構
         student_model = AnomalyDetectionModel(
             recon_in=IMG_CHANNELS,
             recon_out=IMG_CHANNELS,
-            recon_base=STUDENT_RECON_BASE,
-            disc_in=IMG_CHANNELS * 2,
+            recon_base=64,  # 學生重建網路較窄
+            disc_in=IMG_CHANNELS * 2,  # 原圖+重建圖
             disc_out=SEG_CLASSES,
-            disc_base=STUDENT_DISC_BASE
+            disc_base=64  # 學生判別網路較窄
         ).to(device)
 
         # 載入訓練好的學生模型權重
-        model_weights_path = './student_model_checkpoints/bottle.pckl' # ⬅️ 我的的權重路徑
-        student_model.load_state_dict(torch.load(model_weights_path, map_location=device))
+        model_weights_path = './student_model_checkpoints/bottle.pckl'  # ⬅️ 我的的權重路徑
+        student_model.load_state_dict(
+            torch.load(model_weights_path, map_location=device))
 
         # --- 2. 設定為評估模式 ---
         student_model.eval()
 
         test_path = './mvtec/' + obj_name + '/test'  # 測試資料路徑
-        items = ['good', 'broken_large', 'broken_small', 'contamination']  # 測試資料標籤
+        items = ['good', 'broken_large', 'broken_small',
+                 'contamination']  # 測試資料標籤
         print(f"🔍 測試資料夾：{test_path}，共 {len(items)} 類別")
 
         # 依類別逐張讀取影像並執行推論
@@ -178,7 +185,8 @@ def main(obj_names, args):
             for img_name in img_files:
                 img_path = os.path.join(item_path, img_name)
                 print(f"\n🖼️ 處理影像：{img_path}")
-                original, reconstruction, anomaly_mask = predict_anomaly(student_model, img_path, device)
+                original, reconstruction, anomaly_mask = predict_anomaly(
+                    student_model, img_path, device)
 
                 # --- 可視化結果 ---
                 fig, axes = plt.subplots(1, 3, figsize=(15, 5))
@@ -192,15 +200,15 @@ def main(obj_names, args):
 
                 # 將異常遮罩（0和1）與原始圖像疊加顯示
                 axes[2].imshow(original)
-                axes[2].imshow(anomaly_mask, cmap='jet', alpha=0.4) # 使用半透明疊加
+                axes[2].imshow(anomaly_mask, cmap='jet', alpha=0.4)  # 使用半透明疊加
                 axes[2].set_title('Anomaly Mask')
                 axes[2].axis('off')
 
                 # 儲存整張圖
                 plt.tight_layout()
-                plt.savefig(f"{save_root}/comparison_{obj_name}_{img_name}.png")
+                plt.savefig(
+                    f"{save_root}/comparison_{obj_name}_{img_name}.png")
                 plt.close()
-
 
         # # 建立 dataset / dataloader
         # path = f'./mvtec'  # 測試資料路徑
@@ -258,8 +266,12 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--obj_id', action='store', type=int, required=True)
-    parser.add_argument('--gpu_id', action='store', type=int, default=-2, required=False,
-                    help='GPU ID (-2: auto-select, -1: CPU)')
+    parser.add_argument('--gpu_id',
+                        action='store',
+                        type=int,
+                        default=-2,
+                        required=False,
+                        help='GPU ID (-2: auto-select, -1: CPU)')
     args = parser.parse_args()
 
     # 自動選擇GPU
@@ -267,16 +279,17 @@ if __name__ == "__main__":
         args.gpu_id = get_available_gpu()
         print(f"自動選擇 GPU: {args.gpu_id}")
 
-    obj_batch = [
-        ['capsule'], ['bottle'], ['carpet'], ['leather'], ['pill'],
-        ['transistor'], ['tile'], ['cable'], ['zipper'], ['toothbrush'],
-        ['metal_nut'], ['hazelnut'], ['screw'], ['grid'], ['wood']
-    ]
+    obj_batch = [['capsule'], ['bottle'], ['carpet'], ['leather'], ['pill'],
+                 ['transistor'], ['tile'], ['cable'], ['zipper'],
+                 ['toothbrush'], ['metal_nut'], ['hazelnut'], ['screw'],
+                 ['grid'], ['wood']]
 
     if int(args.obj_id) == -1:
-        obj_list = ['capsule', 'bottle', 'carpet', 'leather', 'pill',
-                    'transistor', 'tile', 'cable', 'zipper', 'toothbrush',
-                    'metal_nut', 'hazelnut', 'screw', 'grid', 'wood']
+        obj_list = [
+            'capsule', 'bottle', 'carpet', 'leather', 'pill', 'transistor',
+            'tile', 'cable', 'zipper', 'toothbrush', 'metal_nut', 'hazelnut',
+            'screw', 'grid', 'wood'
+        ]
         picked_classes = obj_list
     else:
         picked_classes = obj_batch[int(args.obj_id)]
