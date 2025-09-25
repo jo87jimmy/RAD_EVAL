@@ -133,7 +133,7 @@ def predict_anomaly(model, image_path, device):
     return original_image_np, recon_image_np, anomaly_mask_np
 
 
-def run_inference(image_path, model, device):
+def run_inference(image_path, model, device, save_path):
     # ==================================================================
     # 4. 預處理輸入圖像
     #    - 預處理步驟必須與訓練時的驗證集/測試集完全相同！
@@ -161,6 +161,9 @@ def run_inference(image_path, model, device):
         # 學生模型會同時輸出重建圖和分割圖
         recon_image, seg_map = model(input_tensor, return_feats=False)
 
+    recon_image = recon_image.squeeze().cpu().numpy().transpose(1, 2, 0)
+    recon_image = (recon_image * 255).astype(np.uint8)
+    Image.fromarray(recon_image).save(f"{save_path}_recon.png")
     # ==================================================================
     # 6. 後處理輸出結果
     # ==================================================================
@@ -179,14 +182,19 @@ def run_inference(image_path, model, device):
     print(f"Image-level anomaly score: {image_anomaly_score:.4f}")
 
     # 可以設定一個閾值來得到二值化的異常遮罩
-    threshold = 0.5
+    threshold = 0.1
     binary_mask = (anomaly_map
                    > threshold).squeeze().cpu().numpy().astype(np.uint8)
 
     # 將異常分數圖轉換為可視化的灰度圖
     anomaly_map_visual = (anomaly_map.squeeze().cpu().numpy() * 255).astype(
         np.uint8)
-
+    print("Seg_map logits min/max:",
+          seg_map.min().item(),
+          seg_map.max().item())
+    print("Anomaly_map min/max:",
+          anomaly_map.min().item(),
+          anomaly_map.max().item())
     return anomaly_map_visual, binary_mask
 
 
@@ -241,9 +249,11 @@ def main(obj_names, args):
             for img_name in img_files:
                 img_path = os.path.join(item_path, img_name)
                 print(f"\n🖼️ 處理影像：{img_path}")
+                # 去掉副檔名，只取檔名主體
+                base_name, _ = os.path.splitext(img_name)
                 # --- 執行推理 ---
                 anomaly_map, binary_mask = run_inference(
-                    img_path, student_model, device)
+                    img_path, student_model, device, save_root + base_name)
                 # original, reconstruction, anomaly_mask = predict_anomaly(
                 #     student_model, img_path, device)
 
@@ -251,17 +261,6 @@ def main(obj_names, args):
                 anomaly_map_img = Image.fromarray(anomaly_map)
                 binary_mask_img = Image.fromarray(binary_mask *
                                                   255)  # 乘以 255 使其可視化
-
-                # # 儲存圖片
-                # output_dir = os.path.join(save_root, img_name.split(".")[0])
-                # anomaly_map_path = os.path.join(output_dir, "anomaly_map.png")
-                # binary_mask_path = os.path.join(output_dir, "binary_mask.png")
-
-                # anomaly_map_img.save(anomaly_map_path)
-                # binary_mask_img.save(binary_mask_path)
-
-                # 去掉副檔名，只取檔名主體
-                base_name, _ = os.path.splitext(img_name)
 
                 # 儲存圖片，加上原檔名方便區分
                 anomaly_map_path = os.path.join(
