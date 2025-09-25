@@ -263,11 +263,15 @@ def main(obj_names, args):
                                                   255)  # 乘以 255 使其可視化
 
                 # 儲存圖片，加上原檔名方便區分
+                # 原始輸入路徑
+                orig_img_path = os.path.join(item_path, img_name)
+                save_img_path = os.path.join(save_root, f"{base_name}_img.png")
                 anomaly_map_path = os.path.join(
-                    save_root, f"{base_name}_anomaly_map.png")
+                    save_root, f"{base_name}_anomaly_map.png")  #異常圖
                 binary_mask_path = os.path.join(
-                    save_root, f"{base_name}_binary_mask.png")
-
+                    save_root, f"{base_name}_binary_mask.png")  #異常遮罩
+                Image.open(orig_img_path).save(
+                    save_img_path)  # 開啟原始圖片並另存到 save_root
                 anomaly_map_img.save(anomaly_map_path)
                 binary_mask_img.save(binary_mask_path)
 
