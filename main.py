@@ -18,6 +18,7 @@ from model_unet import AnomalyDetectionModel
 from data_loader import MVTecDRAEM_Test_Visual_Dataset
 import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
+import cv2
 
 
 def setup_seed(seed):
@@ -133,69 +134,138 @@ def predict_anomaly(model, image_path, device):
     return original_image_np, recon_image_np, anomaly_mask_np
 
 
-def run_inference(image_path, model, device, save_path):
+def run_inference(image_path, model, device, save_path, threshold=0.5):
     # ==================================================================
     # 4. 預處理輸入圖像
-    #    - 預處理步驟必須與訓練時的驗證集/測試集完全相同！
     # ==================================================================
     print(f"Step 4: Preprocessing the input image: {image_path}...")
-    # 這裡的 resize_shape 和 normalize 參數應與訓練時一致
     preprocess = transforms.Compose([
         transforms.Resize([256, 256]),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                             std=[0.229, 0.224,
-                                  0.225])  # 假設使用 ImageNet 的均值和標準差
+                             std=[0.229, 0.224, 0.225])
     ])
 
     image = Image.open(image_path).convert("RGB")
-    input_tensor = preprocess(image).unsqueeze(0).to(
-        device)  # unsqueeze(0) 是為了增加 batch 維度
+    input_tensor = preprocess(image).unsqueeze(0).to(device)
 
     # ==================================================================
-    # 5. 執行前向傳播 (在 torch.no_grad() 環境下)
+    # 5. 前向傳播
     # ==================================================================
     print("Step 5: Performing inference...")
     with torch.no_grad():
-        # 推理時，我們只需要分割圖，所以 return_feats=False
-        # 學生模型會同時輸出重建圖和分割圖
         recon_image, seg_map = model(input_tensor, return_feats=False)
 
-    # recon_image = recon_image.squeeze().cpu().numpy().transpose(1, 2, 0)
-    # recon_image = (recon_image * 255).astype(np.uint8)
-    # Image.fromarray(recon_image).save(f"{save_path}_recon.png")
     # ==================================================================
-    # 6. 後處理輸出結果
+    # 6. 後處理
     # ==================================================================
     print("Step 6: Post-processing the output...")
-    # seg_map 的形狀是 [batch_size, num_classes, H, W]，例如 [1, 2, 256, 256]
-    # 我們需要的是代表 "異常" 的那個通道的機率
-
-    # 使用 softmax 將 logits 轉換為機率
     probabilities = torch.softmax(seg_map, dim=1)
+    anomaly_map = probabilities[:, 1, :, :]  # 通道1 = 異常機率
 
-    # 提取異常類別的機率圖 (假設通道 1 代表異常, 通道 0 代表正常)
-    anomaly_map = probabilities[:, 1, :, :]
-
-    # 獲取整張圖片的異常分數 (可以是最大值或平均值)
     image_anomaly_score = torch.max(anomaly_map).item()
     print(f"Image-level anomaly score: {image_anomaly_score:.4f}")
 
-    # 可以設定一個閾值來得到二值化的異常遮罩
-    threshold = 0.5
-    binary_mask = (anomaly_map
-                   > threshold).squeeze().cpu().numpy().astype(np.uint8)
+    # 二值化 mask
+    binary_mask = (anomaly_map > threshold).squeeze().cpu().numpy().astype(
+        np.uint8) * 255
 
-    # 將異常分數圖轉換為可視化的灰度圖
-    anomaly_map_visual = (anomaly_map.squeeze().cpu().numpy() * 255).astype(
-        np.uint8)
+    # Normalize anomaly map (0~255)
+    anomaly_map_np = anomaly_map.squeeze().cpu().numpy()
+    anomaly_map_norm = (anomaly_map_np - anomaly_map_np.min()) / (
+        anomaly_map_np.max() - anomaly_map_np.min() + 1e-8)
+    anomaly_map_visual = (anomaly_map_norm * 255).astype(np.uint8)
+
+    # Heatmap (彩色)
+    heatmap = cv2.applyColorMap(anomaly_map_visual, cv2.COLORMAP_JET)
+
     print("Seg_map logits min/max:",
           seg_map.min().item(),
           seg_map.max().item())
     print("Anomaly_map min/max:",
           anomaly_map.min().item(),
           anomaly_map.max().item())
+
+    # ==================================================================
+    # 7. 儲存結果
+    # ==================================================================
+    anomaly_map_path = f"{save_path}_anomaly_map.png"
+    binary_mask_path = f"{save_path}_binary_mask.png"
+    heatmap_path = f"{save_path}_heatmap.png"
+
+    Image.fromarray(anomaly_map_visual).save(anomaly_map_path)
+    Image.fromarray(binary_mask).save(binary_mask_path)
+    cv2.imwrite(heatmap_path, heatmap)
+
+    print(f"✅ 儲存完成：{anomaly_map_path}, {binary_mask_path}, {heatmap_path}")
+
     return anomaly_map_visual, binary_mask
+
+
+#完成版!
+# def run_inference(image_path, model, device, save_path):
+#     # ==================================================================
+#     # 4. 預處理輸入圖像
+#     #    - 預處理步驟必須與訓練時的驗證集/測試集完全相同！
+#     # ==================================================================
+#     print(f"Step 4: Preprocessing the input image: {image_path}...")
+#     # 這裡的 resize_shape 和 normalize 參數應與訓練時一致
+#     preprocess = transforms.Compose([
+#         transforms.Resize([256, 256]),
+#         transforms.ToTensor(),
+#         transforms.Normalize(mean=[0.485, 0.456, 0.406],
+#                              std=[0.229, 0.224,
+#                                   0.225])  # 假設使用 ImageNet 的均值和標準差
+#     ])
+
+#     image = Image.open(image_path).convert("RGB")
+#     input_tensor = preprocess(image).unsqueeze(0).to(
+#         device)  # unsqueeze(0) 是為了增加 batch 維度
+
+#     # ==================================================================
+#     # 5. 執行前向傳播 (在 torch.no_grad() 環境下)
+#     # ==================================================================
+#     print("Step 5: Performing inference...")
+#     with torch.no_grad():
+#         # 推理時，我們只需要分割圖，所以 return_feats=False
+#         # 學生模型會同時輸出重建圖和分割圖
+#         recon_image, seg_map = model(input_tensor, return_feats=False)
+
+#     # recon_image = recon_image.squeeze().cpu().numpy().transpose(1, 2, 0)
+#     # recon_image = (recon_image * 255).astype(np.uint8)
+#     # Image.fromarray(recon_image).save(f"{save_path}_recon.png")
+#     # ==================================================================
+#     # 6. 後處理輸出結果
+#     # ==================================================================
+#     print("Step 6: Post-processing the output...")
+#     # seg_map 的形狀是 [batch_size, num_classes, H, W]，例如 [1, 2, 256, 256]
+#     # 我們需要的是代表 "異常" 的那個通道的機率
+
+#     # 使用 softmax 將 logits 轉換為機率
+#     probabilities = torch.softmax(seg_map, dim=1)
+
+#     # 提取異常類別的機率圖 (假設通道 1 代表異常, 通道 0 代表正常)
+#     anomaly_map = probabilities[:, 1, :, :]
+
+#     # 獲取整張圖片的異常分數 (可以是最大值或平均值)
+#     image_anomaly_score = torch.max(anomaly_map).item()
+#     print(f"Image-level anomaly score: {image_anomaly_score:.4f}")
+
+#     # 可以設定一個閾值來得到二值化的異常遮罩
+#     threshold = 0.5
+#     binary_mask = (anomaly_map
+#                    > threshold).squeeze().cpu().numpy().astype(np.uint8)
+
+#     # 將異常分數圖轉換為可視化的灰度圖
+#     anomaly_map_visual = (anomaly_map.squeeze().cpu().numpy() * 255).astype(
+#         np.uint8)
+#     print("Seg_map logits min/max:",
+#           seg_map.min().item(),
+#           seg_map.max().item())
+#     print("Anomaly_map min/max:",
+#           anomaly_map.min().item(),
+#           anomaly_map.max().item())
+#     return anomaly_map_visual, binary_mask
 
 
 # =======================
