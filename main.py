@@ -300,13 +300,14 @@ def run_inference(img_path, model, device, save_path_base):
 
     # --- 4. 產生二值化遮罩 ---
     # 設定一個閾值，將異常機率大於該值的像素標記為 1 (異常)
-    threshold = 0.5
+    threshold = 0.9
     binary_mask = (anomaly_map > threshold).astype(
         np.uint8) * 255  # 轉為 0 或 255
 
     # --- 5. 可視化並儲存 ---
     # 確保原始影像尺寸為 256x256，以便拼接
     original_img_resized = cv2.resize(original_img_cv, (256, 256))
+    #原始圖、重建圖、熱力圖、二值圖
     visualize_and_save(original_img_resized, recon_image_bgr, anomaly_map,
                        binary_mask, save_path_base)
 
@@ -447,29 +448,30 @@ def main(obj_names, args):
                 # --- 執行推理 ---
                 anomaly_map, binary_mask = run_inference(
                     img_path, student_model, device, save_path_base)
+        print(f"\n✅ 物件類別 {obj_name} 測試完成！")
+    print("\n🎉 所有測試已完成！")
+    # original, reconstruction, anomaly_mask = predict_anomaly(
+    #     student_model, img_path, device)
 
-                # original, reconstruction, anomaly_mask = predict_anomaly(
-                #     student_model, img_path, device)
+    # # 將 numpy array 轉換為 PIL Image
+    # anomaly_map_img = Image.fromarray(anomaly_map)
+    # binary_mask_img = Image.fromarray(binary_mask *
+    #                                   255)  # 乘以 255 使其可視化
 
-                # # 將 numpy array 轉換為 PIL Image
-                # anomaly_map_img = Image.fromarray(anomaly_map)
-                # binary_mask_img = Image.fromarray(binary_mask *
-                #                                   255)  # 乘以 255 使其可視化
+    # # 儲存圖片，加上原檔名方便區分
+    # # 原始輸入路徑
+    # orig_img_path = os.path.join(item_path, img_name)
+    # save_img_path = os.path.join(save_root, f"{base_name}_img.png")
+    # anomaly_map_path = os.path.join(
+    #     save_root, f"{base_name}_anomaly_map.png")  #異常圖
+    # binary_mask_path = os.path.join(
+    #     save_root, f"{base_name}_binary_mask.png")  #異常遮罩
+    # Image.open(orig_img_path).save(
+    #     save_img_path)  # 開啟原始圖片並另存到 save_root
+    # anomaly_map_img.save(anomaly_map_path)
+    # binary_mask_img.save(binary_mask_path)
 
-                # # 儲存圖片，加上原檔名方便區分
-                # # 原始輸入路徑
-                # orig_img_path = os.path.join(item_path, img_name)
-                # save_img_path = os.path.join(save_root, f"{base_name}_img.png")
-                # anomaly_map_path = os.path.join(
-                #     save_root, f"{base_name}_anomaly_map.png")  #異常圖
-                # binary_mask_path = os.path.join(
-                #     save_root, f"{base_name}_binary_mask.png")  #異常遮罩
-                # Image.open(orig_img_path).save(
-                #     save_img_path)  # 開啟原始圖片並另存到 save_root
-                # anomaly_map_img.save(anomaly_map_path)
-                # binary_mask_img.save(binary_mask_path)
-
-                # print(f"✅ 儲存完成：{anomaly_map_path}, {binary_mask_path}")
+    # print(f"✅ 儲存完成：{anomaly_map_path}, {binary_mask_path}")
 
 
 # =======================
