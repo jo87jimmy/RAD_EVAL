@@ -134,72 +134,80 @@ def predict_anomaly(model, image_path, device):
     return original_image_np, recon_image_np, anomaly_mask_np
 
 
-def run_inference(image_path, model, device, save_path, threshold=0.5):
+def run_inference(image_path, model, device, save_path, threshold=0.2):
     # ==================================================================
     # 4. 預處理輸入圖像
     # ==================================================================
-    print(f"Step 4: Preprocessing the input image: {image_path}...")
+    print(f"Step 4: Preprocessing the input image: {image_path}..."
+          )  # 顯示正在處理的影像路徑
+
     preprocess = transforms.Compose([
-        transforms.Resize([256, 256]),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                             std=[0.229, 0.224, 0.225])
+        transforms.Resize([256, 256]),  # 調整影像大小為 256x256
+        transforms.ToTensor(),  # 轉換為 Tensor 並標準化到 [0,1]
+        transforms.Normalize(
+            mean=[0.485, 0.456, 0.406],  # 依照 ImageNet 均值做正規化
+            std=[0.229, 0.224, 0.225])  # 依照 ImageNet 標準差做正規化
     ])
 
-    image = Image.open(image_path).convert("RGB")
-    input_tensor = preprocess(image).unsqueeze(0).to(device)
+    image = Image.open(image_path).convert("RGB")  # 讀取影像並轉成 RGB
+    input_tensor = preprocess(image).unsqueeze(0).to(
+        device)  # 增加 batch 維度並搬到 GPU/CPU
 
     # ==================================================================
     # 5. 前向傳播
     # ==================================================================
-    print("Step 5: Performing inference...")
-    with torch.no_grad():
-        recon_image, seg_map = model(input_tensor, return_feats=False)
+    print("Step 5: Performing inference...")  # 顯示正在做推論
+    with torch.no_grad():  # 關閉梯度計算，節省記憶體
+        recon_image, seg_map = model(input_tensor,
+                                     return_feats=False)  # 模型前向傳播，取得重建影像與分割地圖
 
     # ==================================================================
     # 6. 後處理
     # ==================================================================
-    print("Step 6: Post-processing the output...")
-    probabilities = torch.softmax(seg_map, dim=1)
-    anomaly_map = probabilities[:, 1, :, :]  # 通道1 = 異常機率
+    print("Step 6: Post-processing the output...")  # 顯示正在做後處理
+    probabilities = torch.softmax(seg_map, dim=1)  # 對分割地圖做 softmax，取得每個類別機率
+    anomaly_map = probabilities[:, 1, :, :]  # 取通道1的異常機率 (假設通道0是正常，通道1是異常)
 
-    image_anomaly_score = torch.max(anomaly_map).item()
-    print(f"Image-level anomaly score: {image_anomaly_score:.4f}")
+    image_anomaly_score = torch.max(anomaly_map).item()  # 取整張影像最大異常機率作為影像級分數
+    print(f"Image-level anomaly score: {image_anomaly_score:.4f}")  # 顯示影像異常分數
 
     # 二值化 mask
     binary_mask = (anomaly_map > threshold).squeeze().cpu().numpy().astype(
-        np.uint8) * 255
+        np.uint8) * 255  # 將異常機率大於閾值的區域設為 255，形成二值化遮罩
 
     # Normalize anomaly map (0~255)
-    anomaly_map_np = anomaly_map.squeeze().cpu().numpy()
+    anomaly_map_np = anomaly_map.squeeze().cpu().numpy()  # 將異常機率轉成 numpy
     anomaly_map_norm = (anomaly_map_np - anomaly_map_np.min()) / (
-        anomaly_map_np.max() - anomaly_map_np.min() + 1e-8)
-    anomaly_map_visual = (anomaly_map_norm * 255).astype(np.uint8)
+        anomaly_map_np.max() - anomaly_map_np.min() + 1e-8)  # 將異常機率正規化到 0~1
+    anomaly_map_visual = (anomaly_map_norm * 255).astype(
+        np.uint8)  # 將正規化結果轉成 0~255 的影像
 
     # Heatmap (彩色)
-    heatmap = cv2.applyColorMap(anomaly_map_visual, cv2.COLORMAP_JET)
+    heatmap = cv2.applyColorMap(anomaly_map_visual,
+                                cv2.COLORMAP_JET)  # 將異常地圖轉成彩色熱力圖
 
     print("Seg_map logits min/max:",
           seg_map.min().item(),
-          seg_map.max().item())
+          seg_map.max().item())  # 顯示分割地圖原始 logits 的最小最大值
     print("Anomaly_map min/max:",
           anomaly_map.min().item(),
-          anomaly_map.max().item())
+          anomaly_map.max().item())  # 顯示異常地圖機率的最小最大值
 
     # ==================================================================
     # 7. 儲存結果
     # ==================================================================
-    anomaly_map_path = f"{save_path}_anomaly_map.png"
-    binary_mask_path = f"{save_path}_binary_mask.png"
-    heatmap_path = f"{save_path}_heatmap.png"
+    anomaly_map_path = f"{save_path}_anomaly_map.png"  # 設定異常圖儲存路徑
+    binary_mask_path = f"{save_path}_binary_mask.png"  # 設定二值化遮罩儲存路徑
+    heatmap_path = f"{save_path}_heatmap.png"  # 設定彩色熱力圖儲存路徑
 
-    Image.fromarray(anomaly_map_visual).save(anomaly_map_path)
-    Image.fromarray(binary_mask).save(binary_mask_path)
-    cv2.imwrite(heatmap_path, heatmap)
+    Image.fromarray(anomaly_map_visual).save(anomaly_map_path)  # 儲存灰階異常圖
+    Image.fromarray(binary_mask).save(binary_mask_path)  # 儲存二值遮罩
+    cv2.imwrite(heatmap_path, heatmap)  # 儲存彩色熱力圖
 
-    print(f"✅ 儲存完成：{anomaly_map_path}, {binary_mask_path}, {heatmap_path}")
+    print(f"✅ 儲存完成：{anomaly_map_path}, {binary_mask_path}, {heatmap_path}"
+          )  # 顯示儲存完成訊息
 
-    return anomaly_map_visual, binary_mask
+    return anomaly_map_visual, binary_mask  # 回傳異常圖與二值遮罩
 
 
 #完成版!
@@ -324,93 +332,29 @@ def main(obj_names, args):
                 # --- 執行推理 ---
                 anomaly_map, binary_mask = run_inference(
                     img_path, student_model, device, save_root + base_name)
+
                 # original, reconstruction, anomaly_mask = predict_anomaly(
                 #     student_model, img_path, device)
 
-                # 將 numpy array 轉換為 PIL Image
-                anomaly_map_img = Image.fromarray(anomaly_map)
-                binary_mask_img = Image.fromarray(binary_mask *
-                                                  255)  # 乘以 255 使其可視化
+                # # 將 numpy array 轉換為 PIL Image
+                # anomaly_map_img = Image.fromarray(anomaly_map)
+                # binary_mask_img = Image.fromarray(binary_mask *
+                #                                   255)  # 乘以 255 使其可視化
 
-                # 儲存圖片，加上原檔名方便區分
-                # 原始輸入路徑
-                orig_img_path = os.path.join(item_path, img_name)
-                save_img_path = os.path.join(save_root, f"{base_name}_img.png")
-                anomaly_map_path = os.path.join(
-                    save_root, f"{base_name}_anomaly_map.png")  #異常圖
-                binary_mask_path = os.path.join(
-                    save_root, f"{base_name}_binary_mask.png")  #異常遮罩
-                Image.open(orig_img_path).save(
-                    save_img_path)  # 開啟原始圖片並另存到 save_root
-                anomaly_map_img.save(anomaly_map_path)
-                binary_mask_img.save(binary_mask_path)
+                # # 儲存圖片，加上原檔名方便區分
+                # # 原始輸入路徑
+                # orig_img_path = os.path.join(item_path, img_name)
+                # save_img_path = os.path.join(save_root, f"{base_name}_img.png")
+                # anomaly_map_path = os.path.join(
+                #     save_root, f"{base_name}_anomaly_map.png")  #異常圖
+                # binary_mask_path = os.path.join(
+                #     save_root, f"{base_name}_binary_mask.png")  #異常遮罩
+                # Image.open(orig_img_path).save(
+                #     save_img_path)  # 開啟原始圖片並另存到 save_root
+                # anomaly_map_img.save(anomaly_map_path)
+                # binary_mask_img.save(binary_mask_path)
 
-                print(f"✅ 儲存完成：{anomaly_map_path}, {binary_mask_path}")
-
-    # --- 可視化結果 ---
-    # fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    # axes[0].imshow(original)
-    # axes[0].set_title('Original Image')
-    # axes[0].axis('off')
-
-    # axes[1].imshow(reconstruction)
-    # axes[1].set_title('Reconstructed Image')
-    # axes[1].axis('off')
-
-    # # 將異常遮罩（0和1）與原始圖像疊加顯示
-    # axes[2].imshow(original)
-    # axes[2].imshow(anomaly_mask, cmap='jet', alpha=0.4)  # 使用半透明疊加
-    # axes[2].set_title('Anomaly Mask')
-    # axes[2].axis('off')
-
-    # # 儲存整張圖
-    # plt.tight_layout()
-    # plt.savefig(
-    #     f"{save_root}/comparison_{obj_name}_{img_name}.png")
-    # plt.close()
-
-    # # 建立 dataset / dataloader
-    # path = f'./mvtec'  # 測試資料路徑
-    # data_dir = os.path.join(path, obj_name, "test")
-    # print(f"  📂 建立 dataset: {data_dir}")
-    # dataset = MVTecDRAEM_Test_Visual_Dataset(
-    #     data_dir, resize_shape=[256,256])
-    # dataloader = DataLoader(dataset,
-    #                         batch_size=1,
-    #                         shuffle=False,
-    #                         num_workers=0)
-    # print("  ✅ Dataset size:", len(dataset))
-
-    # print("  🚀 開始遍歷 dataloader...")
-    # for i_batch, sample_batched in enumerate(dataloader):
-    #     # sample = {'image': image, 'has_anomaly': has_anomaly,'mask': mask, 'idx': idx}
-    #     print(f"    處理 batch {i_batch+1}/{len(dataloader)} (idx={sample_batched['idx'].item()})")
-    #     # --- 3. 前處理 ---
-    #     gray_batch = sample_batched["image"]
-
-    #     # --- 4. 預測 ---
-    #     original, reconstruction, anomaly_mask = predict_anomaly(student_model, gray_batch, device)
-
-    #     # --- 可視化結果 ---
-    #     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    #     axes[0].imshow(original)
-    #     axes[0].set_title('Original Image')
-    #     axes[0].axis('off')
-
-    #     axes[1].imshow(reconstruction)
-    #     axes[1].set_title('Reconstructed Image')
-    #     axes[1].axis('off')
-
-    #     # 將異常遮罩（0和1）與原始圖像疊加顯示
-    #     axes[2].imshow(original)
-    #     axes[2].imshow(anomaly_mask, cmap='jet', alpha=0.4) # 使用半透明疊加
-    #     axes[2].set_title('Anomaly Mask')
-    #     axes[2].axis('off')
-
-    #     # 儲存整張圖
-    #     plt.tight_layout()
-    #     plt.savefig(f"{save_root}/comparison_{obj_name}_{i_batch}.png")
-    #     plt.close()
+                # print(f"✅ 儲存完成：{anomaly_map_path}, {binary_mask_path}")
 
 
 # =======================
