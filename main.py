@@ -300,7 +300,7 @@ def run_inference(img_path, model, device, save_path_base):
 
     # --- 4. 產生二值化遮罩 ---
     # 設定一個閾值，將異常機率大於該值的像素標記為 1 (異常)
-    threshold = 0.3
+    threshold = 0.5
     binary_mask = (anomaly_map > threshold).astype(
         np.uint8) * 255  # 轉為 0 或 255
 
